@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PeerChat</title>
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.3.1/dist/peerjs.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        #chat { border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: scroll; }
+        #message { width: 80%; }
+    </style>
+</head>
+<body>
+    <h1>P2P Chat</h1>
+    <div id="myPeerId" style="margin-bottom: 10px; font-weight: bold;"></div>
+    <input type="text" id="peerId" placeholder="Enter Peer ID">
+    <button onclick="connect()">Connect</button>
+    <div id="chat"></div>
+    <input type="text" id="message" placeholder="Type a message">
+    <button onclick="sendMessage()">Send</button>
+
+    <script>
+        let peer = new Peer();
+        let conn;
+
+        peer.on('open', function(id) {
+            console.log('My peer ID is: ' + id);
+            document.getElementById('myPeerId').innerText = 'Your Peer ID: ' + id;
+            document.getElementById('peerId').placeholder = 'Enter Peer ID (Your ID: ' + id + ')';
+        });
+
+        function connect() {
+            let peerId = document.getElementById('peerId').value;
+            if (peerId && peerId !== peer.id) {
+                conn = peer.connect(peerId);
+                conn.on('open', function() {
+                    conn.on('data', function(data) {
+                        displayMessage(data, 'Received');
+                    });
+                });
+            } else {
+                alert('Please enter a valid Peer ID different from yours.');
+            }
+        }
+
+        peer.on('connection', function(connection) {
+            conn = connection;
+            conn.on('data', function(data) {
+                displayMessage(data, 'Received');
+            });
+        });
+
+        function sendMessage() {
+            let message = document.getElementById('message').value;
+            if (message && conn) {
+                conn.send(message);
+                displayMessage(message, 'Sent');
+                document.getElementById('message').value = '';
+            }
+        }
+
+        function displayMessage(message, type) {
+            let chat = document.getElementById('chat');
+            chat.innerHTML += '<p><strong>' + type + ':</strong> ' + message + '</p>';
+            chat.scrollTop = chat.scrollHeight;
+        }
+    </script>
+</body>
+</html>
