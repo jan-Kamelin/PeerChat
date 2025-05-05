@@ -71,12 +71,26 @@
       gap: 0.5rem;
       margin-bottom: 1rem;
     }
+    #notifications, #chat-request, #call-request {
+      margin: 1rem 0;
+      padding: 0.5rem;
+      background: #fff3cd;
+      border: 1px solid #ffeeba;
+      border-radius: 6px;
+      display: none;
+    }
+    #status {
+      margin-top: 0.5rem;
+      font-style: italic;
+      color: gray;
+    }
   </style>
 </head>
 <body>
   <header>🔗 PeerChat</header>
 
   <p>Your ID: <span id="peer-id">Loading…</span></p>
+  <p id="status">Status: <span id="presence-status">Active</span></p>
   <button id="copy-link" disabled>Copy My Chat Link</button>
 
   <input type="text" id="connect-to" placeholder="Connect to ID (4 digits)" />
@@ -92,6 +106,10 @@
   <input type="text" id="message" placeholder="Message" />
   <button id="send" disabled>Send</button>
 
+  <div id="notifications"></div>
+  <div id="chat-request"></div>
+  <div id="call-request"></div>
+
   <div id="video-container">
     <video id="localVideo" autoplay muted></video>
     <video id="remoteVideo" autoplay></video>
@@ -99,156 +117,41 @@
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script>
-    const urlParams = new URLSearchParams(window.location.search);
-    const targetIdFromUrl = urlParams.get("connect");
-
-    const userId = prompt("Enter a 4-digit ID to use:");
-    if (!/^[0-9]{4}$/.test(userId)) {
-      alert("ID must be a 4-digit number.");
-      throw new Error("Invalid ID");
+    let hidden;
+    let visibilityChange;
+    if (typeof document.hidden !== "undefined") {
+      hidden = "hidden";
+      visibilityChange = "visibilitychange";
     }
 
-    const peer = new Peer(userId, {
-      host: "0.peerjs.com",
-      port: 443,
-      path: "/",
-      secure: true
-    });
+    document.addEventListener(visibilityChange, () => {
+      document.getElementById("presence-status").textContent = document.hidden ? "Away" : "Active";
+    }, false);
 
-    const peerIdDisplay = document.getElementById("peer-id");
-    const connectToInput = document.getElementById("connect-to");
-    const connectBtn = document.getElementById("connect");
-    const messageInput = document.getElementById("message");
-    const sendBtn = document.getElementById("send");
-    const messages = document.getElementById("messages");
-    const copyLinkBtn = document.getElementById("copy-link");
-    const callBtn = document.getElementById("call");
-    const endCallBtn = document.getElementById("end-call");
-    const fullscreenBtn = document.getElementById("fullscreen");
-    const localVideo = document.getElementById("localVideo");
-    const remoteVideo = document.getElementById("remoteVideo");
-    const videoContainer = document.getElementById("video-container");
-
-    let conn = null;
-    let call = null;
-
-    function addMessage(sender, text) {
-      const msg = document.createElement("div");
-      const timestamp = new Date().toLocaleTimeString();
-      msg.textContent = `[${timestamp}] ${sender}: ${text}`;
-      messages.appendChild(msg);
-      messages.scrollTop = messages.scrollHeight;
-
-      if (sender === "Peer") {
-        const audio = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
-        audio.play().catch(() => {});
-      }
+    const notifications = document.getElementById("notifications");
+    function showNotification(msg) {
+      notifications.textContent = msg;
+      notifications.style.display = 'block';
+      setTimeout(() => notifications.style.display = 'none', 5000);
     }
 
-    function setupConnection() {
-      sendBtn.disabled = false;
-      callBtn.disabled = false;
-      conn.on("data", data => addMessage("Peer", data));
-      conn.on("close", () => addMessage("System", "Connection closed."));
-      addMessage("System", "Connected!");
+    function showRequest(containerId, text, onAccept, onReject) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = `${text} <button>Accept</button> <button>Reject</button>`;
+      container.style.display = 'block';
+      const [acceptBtn, rejectBtn] = container.querySelectorAll('button');
+      acceptBtn.onclick = () => { container.style.display = 'none'; onAccept(); };
+      rejectBtn.onclick = () => { container.style.display = 'none'; onReject(); };
     }
 
-    peer.on("open", id => {
-      peerIdDisplay.textContent = id;
-      copyLinkBtn.disabled = false;
+    // Add these calls to the rest of your peer.on("connection") and peer.on("call") handlers.
+    // Example additions shown:
 
-      copyLinkBtn.onclick = () => {
-        const link = `${window.location.origin}${window.location.pathname}?connect=${id}`;
-        navigator.clipboard.writeText(link).then(() => {
-          alert("Link copied to clipboard:\n" + link);
-        });
-      };
+    // Inside peer.on("connection")
+    // showRequest("chat-request", "Chat request received.", () => { conn = incoming; setupConnection(); }, () => { incoming.close(); });
 
-      if (targetIdFromUrl && /^\d{4}$/.test(targetIdFromUrl)) {
-        connectToInput.value = targetIdFromUrl;
-        connectToPeer(targetIdFromUrl);
-      }
-    });
-
-    peer.on("connection", incoming => {
-      conn = incoming;
-      setupConnection();
-    });
-
-    peer.on("call", incomingCall => {
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
-        videoContainer.style.display = 'block';
-        localVideo.srcObject = stream;
-        call = incomingCall;
-        call.answer(stream);
-        call.on("stream", remoteStream => {
-          remoteVideo.srcObject = remoteStream;
-        });
-        call.on("close", () => {
-          addMessage("System", "Call ended.");
-          videoContainer.style.display = 'none';
-        });
-        endCallBtn.style.display = fullscreenBtn.style.display = 'inline-block';
-      });
-    });
-
-    connectBtn.onclick = () => {
-      const targetId = connectToInput.value.trim();
-      if (targetId) connectToPeer(targetId);
-    };
-
-    function connectToPeer(id) {
-      conn = peer.connect(id);
-      conn.on("open", setupConnection);
-    }
-
-    sendBtn.onclick = () => {
-      const msg = messageInput.value;
-      if (msg && conn?.open) {
-        conn.send(msg);
-        addMessage("You", msg);
-        messageInput.value = "";
-      }
-    };
-
-    callBtn.onclick = () => {
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
-        videoContainer.style.display = 'block';
-        localVideo.srcObject = stream;
-        call = peer.call(connectToInput.value.trim(), stream);
-        call.on("stream", remoteStream => {
-          remoteVideo.srcObject = remoteStream;
-        });
-        call.on("close", () => {
-          addMessage("System", "Call ended.");
-          videoContainer.style.display = 'none';
-        });
-        endCallBtn.style.display = fullscreenBtn.style.display = 'inline-block';
-      });
-    };
-
-    endCallBtn.onclick = () => {
-      if (call) {
-        call.close();
-        videoContainer.style.display = 'none';
-        endCallBtn.style.display = fullscreenBtn.style.display = 'none';
-      }
-    };
-
-    fullscreenBtn.onclick = () => {
-      if (videoContainer.requestFullscreen) videoContainer.requestFullscreen();
-    };
-
-    peer.on("error", err => {
-      alert("PeerJS error: " + err.message);
-      console.error(err);
-    });
-
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(console.error);
-      });
-    }
+    // Inside peer.on("call")
+    // showRequest("call-request", "Incoming call - Accept video?", () => { /* answer with video */ }, () => { incomingCall.close(); });
   </script>
 
   <script type="application/json" id="pwa-manifest">
@@ -268,5 +171,6 @@
       ]
     }
   </script>
+  <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlBlZXJDaGF0IiwKICAic2hvcnRfbmFtZSI6ICJQZWVyQ2hhdCIsCiAgInN0YXJ0X3VybCI6ICIuIiwKICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwKICAiYmFja2dyb3VuZF9jb2xvciI6ICIjZmZmZmZmIiwKICAidGhlbWVfY29sb3IiOiAiIzRDQUY1MCIsCiAgImljb25zIjogWwogICAgewogICAgICAic3JjIjogImh0dHBzOi8vY2RuLWljb25zLXBuZy5mbGF0aWNvbi5jb20vNTEyLzEzODQvMTM4NDAzMS5wbmciLAogICAgICAic2l6ZXMiOiAiMTkyeDE5MiIsCiAgICAgICJ0eXBlIjogImltYWdlL3BuZyIKICAgIH0KICBdCn0=" />
 </body>
 </html>
