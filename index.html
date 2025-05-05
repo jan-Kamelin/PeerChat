@@ -114,29 +114,9 @@
       }
     }
 
-    // Register the user's 4-digit ID in the public kvdb.io store
-    async function registerUserId() {
-      try {
-        const response = await fetch(`https://kvdb.io/YOUR_BUCKET/${userId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ peerId: peer.id })
-        });
-        if (!response.ok) {
-          throw new Error("Failed to register user ID.");
-        }
-        console.log(`Registered ID ${userId} to Peer ID ${peer.id}`);
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
     peer.on("open", id => {
       peerIdDisplay.textContent = id;
       copyLinkBtn.disabled = false;
-
-      // Register user ID
-      registerUserId();
 
       copyLinkBtn.onclick = () => {
         const link = `${window.location.origin}${window.location.pathname}?connect=${id}`;
@@ -145,7 +125,6 @@
         });
       };
 
-      // If connecting from a URL (peer code provided), auto-connect
       if (targetIdFromUrl && /^\d{4}$/.test(targetIdFromUrl)) {
         connectToInput.value = targetIdFromUrl;
         connectToPeer(targetIdFromUrl);
@@ -163,17 +142,8 @@
     };
 
     function connectToPeer(id) {
-      fetch(`https://kvdb.io/YOUR_BUCKET/${id}`)
-        .then(response => response.json())
-        .then(data => {
-          if (data?.peerId) {
-            conn = peer.connect(data.peerId);
-            conn.on("open", setupConnection);
-          } else {
-            alert("Peer not found!");
-          }
-        })
-        .catch(() => alert("Error connecting to peer."));
+      conn = peer.connect(id);
+      conn.on("open", setupConnection);
     }
 
     function setupConnection() {
