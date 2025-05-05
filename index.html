@@ -3,117 +3,52 @@
 <head>
   <meta charset="utf-8">
   <title>PeerChat</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
       font-family: sans-serif;
       padding: 1rem;
-      margin: 0;
-      background: #f9f9f9;
-    }
-
-    #container {
       max-width: 600px;
       margin: auto;
     }
-
-    h2 {
-      margin-top: 0;
-    }
-
     #peer-id {
       font-weight: bold;
       color: green;
     }
-
     #messages {
       border: 1px solid #ccc;
       height: 200px;
       overflow-y: auto;
       padding: 5px;
       margin: 10px 0;
-      background: white;
     }
-
     #messages div {
       margin-bottom: 4px;
     }
-
     input, button {
       font-size: 1rem;
-      margin: 5px 0;
-      padding: 8px;
+      margin: 4px 0;
       width: 100%;
       box-sizing: border-box;
     }
-
-    .row {
-      display: flex;
-      gap: 10px;
-    }
-
-    .row > * {
-      flex: 1;
-    }
-
     #call-status {
+      color: blue;
       margin: 10px 0;
-      font-weight: bold;
-    }
-
-    audio {
-      display: none;
-    }
-
-    @media (min-width: 500px) {
-      input, button {
-        width: auto;
-      }
     }
   </style>
 </head>
 <body>
-  <div id="container">
-    <h2>PeerChat</h2>
-    <p>Your ID: <span id="peer-id">Loading…</span></p>
-
-    <div class="row">
-      <input type="text" id="connect-to" placeholder="Connect to ID (4 digits)">
-      <button id="connect">Connect</button>
-    </div>
-
-    <div class="row">
-      <button id="call" disabled>Call</button>
-      <button id="end-call" disabled>End Call</button>
-      <button id="reject-call" style="display: none;">Reject Call</button>
-    </div>
-
-    <div id="call-status">Not in call</div>
-
-    <div id="messages"></div>
-
-    <div class="row">
-      <input type="text" id="message" placeholder="Message">
-      <button id="send" disabled>Send</button>
-    </div>
-
-    <audio id="remoteAudio" autoplay></audio>
-  </div>
+  <h2>PeerChat</h2>
+  <p>Your ID: <span id="peer-id">Loading…</span></p>
+  <input type="text" id="connect-to" placeholder="Connect to ID (4 digits)">
+  <button id="connect">Connect</button>
+  <div id="call-status">Call status: Not connected</div>
+  <div id="messages"></div>
+  <input type="text" id="message" placeholder="Message">
+  <button id="send" disabled>Send</button>
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script>
-    const peerIdDisplay = document.getElementById("peer-id");
-    const connectToInput = document.getElementById("connect-to");
-    const connectBtn = document.getElementById("connect");
-    const messageInput = document.getElementById("message");
-    const sendBtn = document.getElementById("send");
-    const messages = document.getElementById("messages");
-    const callBtn = document.getElementById("call");
-    const endCallBtn = document.getElementById("end-call");
-    const rejectCallBtn = document.getElementById("reject-call");
-    const callStatus = document.getElementById("call-status");
-    const remoteAudio = document.getElementById("remoteAudio");
-
     const urlParams = new URLSearchParams(window.location.search);
     const targetIdFromUrl = urlParams.get("connect");
 
@@ -130,56 +65,97 @@
       secure: true
     });
 
+    const peerIdDisplay = document.getElementById("peer-id");
+    const connectToInput = document.getElementById("connect-to");
+    const connectBtn = document.getElementById("connect");
+    const messageInput = document.getElementById("message");
+    const sendBtn = document.getElementById("send");
+    const messages = document.getElementById("messages");
+    const callStatus = document.getElementById("call-status");
+
     let conn = null;
-    let currentCall = null;
-    let localStream = null;
+    let peerAliveInterval = null;
 
     function addMessage(sender, text) {
       const msg = document.createElement("div");
       msg.textContent = `${sender}: ${text}`;
       messages.appendChild(msg);
       messages.scrollTop = messages.scrollHeight;
+
+      if (sender === "Peer" && document.hidden && Notification.permission === "granted") {
+        new Notification("New message from Peer", { body: text });
+      }
     }
 
-    function updateCallStatus(status) {
-      callStatus.textContent = status;
-    }
-
-    function setupConnection() {
-      sendBtn.disabled = false;
-      callBtn.disabled = false;
-
-      conn.on("data", data => addMessage("Peer", data));
-      conn.on("close", () => {
-        addMessage("System", "Connection closed.");
-        sendBtn.disabled = true;
-        callBtn.disabled = true;
-      });
-
-      addMessage("System", "Connected!");
+    function updateCallStatus(text) {
+      callStatus.textContent = "Call status: " + text;
     }
 
     peer.on("open", id => {
       peerIdDisplay.textContent = id;
+      updateCallStatus("Ready");
+
+      // Keep alive heartbeat
+      peerAliveInterval = setInterval(() => {
+        if (peer.socket?.open) {
+          peer.socket.send({ type: "HEARTBEAT" });
+        }
+      }, 25000);
+
+      // Try auto-connect from URL
       if (targetIdFromUrl && /^\d{4}$/.test(targetIdFromUrl)) {
         connectToInput.value = targetIdFromUrl;
         connectToPeer(targetIdFromUrl);
       }
+
+      // Request notification permission
+      if (Notification.permission !== "granted") {
+        Notification.requestPermission();
+      }
     });
 
     peer.on("connection", incoming => {
-      conn = incoming;
-      conn.on("open", setupConnection);
+      if (conn) {
+        incoming.close();
+        return;
+      }
+
+      const accept = confirm(`Incoming connection from ${incoming.peer}. Accept?`);
+      if (accept) {
+        conn = incoming;
+        setupConnection();
+      } else {
+        incoming.close();
+      }
     });
+
+    function connectToPeer(id) {
+      if (conn) conn.close();
+      conn = peer.connect(id);
+      conn.on("open", setupConnection);
+      updateCallStatus("Calling " + id + "…");
+    }
 
     connectBtn.onclick = () => {
       const targetId = connectToInput.value.trim();
-      if (targetId) connectToPeer(targetId);
+      if (targetId && /^\d{4}$/.test(targetId)) {
+        connectToPeer(targetId);
+      } else {
+        alert("Please enter a valid 4-digit ID.");
+      }
     };
 
-    function connectToPeer(id) {
-      conn = peer.connect(id);
-      conn.on("open", setupConnection);
+    function setupConnection() {
+      updateCallStatus("Connected to " + conn.peer);
+      sendBtn.disabled = false;
+      conn.on("data", data => addMessage("Peer", data));
+      conn.on("close", () => {
+        addMessage("System", "Connection closed.");
+        updateCallStatus("Disconnected");
+        sendBtn.disabled = true;
+        conn = null;
+      });
+      addMessage("System", `Connected to ${conn.peer}`);
     }
 
     sendBtn.onclick = () => {
@@ -191,70 +167,15 @@
       }
     };
 
-    callBtn.onclick = async () => {
-      try {
-        updateCallStatus("Calling...");
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const call = peer.call(connectToInput.value.trim(), localStream);
-        handleCall(call);
-      } catch (err) {
-        alert("Unable to access microphone.");
-        console.error(err);
-      }
-    };
-
-    endCallBtn.onclick = () => {
-      if (currentCall) {
-        currentCall.close();
-        updateCallStatus("Call ended");
-      }
-      endCallBtn.disabled = true;
-      rejectCallBtn.style.display = "none";
-    };
-
-    rejectCallBtn.onclick = () => {
-      if (currentCall) {
-        currentCall.close();
-        updateCallStatus("Call rejected");
-        rejectCallBtn.style.display = "none";
-      }
-    };
-
-    function handleCall(call) {
-      currentCall = call;
-      rejectCallBtn.style.display = "none";
-
-      call.on("stream", remoteStream => {
-        remoteAudio.srcObject = remoteStream;
-        updateCallStatus("In call");
-        endCallBtn.disabled = false;
-      });
-
-      call.on("close", () => {
-        updateCallStatus("Call ended");
-        endCallBtn.disabled = true;
-        currentCall = null;
-      });
-    }
-
-    peer.on("call", async call => {
-      updateCallStatus("Incoming call…");
-      rejectCallBtn.style.display = "inline";
-
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        call.answer(localStream);
-        handleCall(call);
-        rejectCallBtn.style.display = "none";
-      } catch (err) {
-        alert("Could not access microphone.");
-        call.close();
-      }
-    });
-
     peer.on("error", err => {
       alert("PeerJS error: " + err.message);
       console.error(err);
+    });
+
+    window.addEventListener("beforeunload", () => {
+      if (peerAliveInterval) clearInterval(peerAliveInterval);
+      if (conn) conn.close();
+      peer.destroy();
     });
   </script>
 </body>
