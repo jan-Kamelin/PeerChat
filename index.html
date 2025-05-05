@@ -99,19 +99,16 @@
     const urlParams = new URLSearchParams(window.location.search);
     const targetIdFromUrl = urlParams.get("connect");
 
-    let userId = localStorage.getItem("peer-id"); // Retrieve stored ID from localStorage
-    if (!userId) {
-      // Prompt for a new ID if not saved
-      userId = prompt("Enter a 4-digit ID to use:");
-      if (!/^[0-9]{4}$/.test(userId)) {
-        alert("ID must be a 4-digit number.");
-        throw new Error("Invalid ID");
-      }
-      // Ask the user if they want to store their ID for next time
-      const storeId = confirm("Would you like to save your ID for next time?");
-      if (storeId) {
-        localStorage.setItem("peer-id", userId); // Save ID in localStorage
-      }
+    // Prompt user for ID and if they want it stored
+    const userId = prompt("Enter a 4-digit ID to use:");
+    if (!/^[0-9]{4}$/.test(userId)) {
+      alert("ID must be a 4-digit number.");
+      throw new Error("Invalid ID");
+    }
+
+    const storeId = confirm("Do you want to store this ID on your device for future use?");
+    if (storeId) {
+      localStorage.setItem("peerId", userId);
     }
 
     const peer = new Peer(userId, {
@@ -154,13 +151,11 @@
       messages.appendChild(msg);
       messages.scrollTop = messages.scrollHeight;
 
-      // Play sound on message received
       if (sender === "Peer") {
         const audio = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
         audio.play().catch(() => {});
       }
 
-      // Display notification if the page is not focused
       if (document.hidden && Notification.permission === "granted") {
         new Notification("New message from Peer", { body: text });
       }
@@ -262,9 +257,9 @@
       copyLinkBtn.disabled = false;
 
       copyLinkBtn.onclick = () => {
-        const link = `${window.location.href}?connect=${id}`;
+        const link = `${window.location.origin}${window.location.pathname}?connect=${id}`;
         navigator.clipboard.writeText(link).then(() => {
-          alert("Chat link copied to clipboard.");
+          alert("Link copied to clipboard:\n" + link);
         });
       };
 
@@ -273,9 +268,13 @@
       }
     });
 
-    // Ask for notification permission
     if (Notification.permission !== "granted") {
       Notification.requestPermission();
+    }
+
+    // Ensure background notifications and connection handling
+    if (document.hidden && conn) {
+      conn.send("User is away");
     }
   </script>
 </body>
