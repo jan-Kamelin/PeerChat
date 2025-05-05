@@ -117,16 +117,109 @@
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script>
-    let hidden;
-    let visibilityChange;
-    if (typeof document.hidden !== "undefined") {
-      hidden = "hidden";
-      visibilityChange = "visibilitychange";
+    let conn, call;
+    const peer = new Peer();
+
+    peer.on('open', id => {
+      document.getElementById('peer-id').textContent = id;
+      document.getElementById('copy-link').disabled = false;
+      document.getElementById('copy-link').onclick = () => {
+        navigator.clipboard.writeText(location.href + '#' + id);
+        showNotification("Link copied!");
+      };
+    });
+
+    // Presence indicator
+    document.addEventListener('visibilitychange', () => {
+      document.getElementById('presence-status').textContent = document.hidden ? 'Away' : 'Active';
+    });
+
+    const connectBtn = document.getElementById('connect');
+    const callBtn = document.getElementById('call');
+    const endCallBtn = document.getElementById('end-call');
+    const fullscreenBtn = document.getElementById('fullscreen');
+    const messageInput = document.getElementById('message');
+    const sendBtn = document.getElementById('send');
+    const messages = document.getElementById('messages');
+
+    connectBtn.onclick = () => {
+      const id = document.getElementById('connect-to').value;
+      if (!id) return;
+      const outgoing = peer.connect(id);
+      setupConnection(outgoing);
+    };
+
+    function setupConnection(c) {
+      conn = c;
+      conn.on('open', () => {
+        showNotification("Connected!");
+        sendBtn.disabled = false;
+        callBtn.disabled = false;
+      });
+      conn.on('data', data => {
+        const div = document.createElement('div');
+        div.textContent = "Peer: " + data;
+        messages.appendChild(div);
+      });
     }
 
-    document.addEventListener(visibilityChange, () => {
-      document.getElementById("presence-status").textContent = document.hidden ? "Away" : "Active";
-    }, false);
+    sendBtn.onclick = () => {
+      const text = messageInput.value;
+      conn.send(text);
+      const div = document.createElement('div');
+      div.textContent = "You: " + text;
+      messages.appendChild(div);
+      messageInput.value = '';
+    };
+
+    peer.on('connection', incoming => {
+      showRequest("chat-request", "Chat request received.", () => {
+        setupConnection(incoming);
+      }, () => {
+        incoming.close();
+      });
+    });
+
+    // Call handling
+    callBtn.onclick = async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      document.getElementById('localVideo').srcObject = stream;
+      call = peer.call(document.getElementById('connect-to').value, stream);
+      handleCallStream(call);
+    };
+
+    peer.on('call', incomingCall => {
+      showRequest("call-request", "Incoming call. Accept video?", async () => {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        document.getElementById('localVideo').srcObject = stream;
+        incomingCall.answer(stream);
+        call = incomingCall;
+        handleCallStream(call);
+      }, () => {
+        incomingCall.close();
+      });
+    });
+
+    function handleCallStream(callInstance) {
+      document.getElementById('video-container').style.display = 'block';
+      endCallBtn.style.display = 'inline-block';
+      fullscreenBtn.style.display = 'inline-block';
+
+      callInstance.on('stream', remoteStream => {
+        document.getElementById('remoteVideo').srcObject = remoteStream;
+      });
+
+      endCallBtn.onclick = () => {
+        callInstance.close();
+        document.getElementById('video-container').style.display = 'none';
+        endCallBtn.style.display = 'none';
+        fullscreenBtn.style.display = 'none';
+      };
+
+      fullscreenBtn.onclick = () => {
+        document.getElementById('video-container').requestFullscreen();
+      };
+    }
 
     const notifications = document.getElementById("notifications");
     function showNotification(msg) {
@@ -143,15 +236,6 @@
       acceptBtn.onclick = () => { container.style.display = 'none'; onAccept(); };
       rejectBtn.onclick = () => { container.style.display = 'none'; onReject(); };
     }
-
-    // Add these calls to the rest of your peer.on("connection") and peer.on("call") handlers.
-    // Example additions shown:
-
-    // Inside peer.on("connection")
-    // showRequest("chat-request", "Chat request received.", () => { conn = incoming; setupConnection(); }, () => { incoming.close(); });
-
-    // Inside peer.on("call")
-    // showRequest("call-request", "Incoming call - Accept video?", () => { /* answer with video */ }, () => { incomingCall.close(); });
   </script>
 
   <script type="application/json" id="pwa-manifest">
