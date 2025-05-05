@@ -57,6 +57,20 @@
     button:disabled {
       background-color: #a5d6a7;
     }
+    #video-call {
+      display: none;
+      margin-top: 20px;
+    }
+    #remote-video {
+      width: 100%;
+      height: auto;
+      border: 1px solid #ccc;
+    }
+    #local-video {
+      width: 100%;
+      height: auto;
+      border: 1px solid #ccc;
+    }
   </style>
 </head>
 <body>
@@ -72,6 +86,13 @@
 
   <input type="text" id="message" placeholder="Message" />
   <button id="send" disabled>Send</button>
+
+  <div id="video-call">
+    <h3>Video Call</h3>
+    <video id="local-video" autoplay muted></video>
+    <video id="remote-video" autoplay></video>
+    <button id="end-call">End Call</button>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script>
@@ -98,9 +119,25 @@
     const sendBtn = document.getElementById("send");
     const messages = document.getElementById("messages");
     const copyLinkBtn = document.getElementById("copy-link");
+    const videoCallContainer = document.getElementById("video-call");
+    const localVideo = document.getElementById("local-video");
+    const remoteVideo = document.getElementById("remote-video");
+    const endCallBtn = document.getElementById("end-call");
 
     let conn = null;
+    let call = null;
+    let localStream = null;
 
+    // Handle background focus and notifications
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && conn) {
+        conn.send("User is away");
+      } else if (!document.hidden && conn) {
+        conn.send("User is back");
+      }
+    });
+
+    // Add messages to the chat
     function addMessage(sender, text) {
       const msg = document.createElement("div");
       const timestamp = new Date().toLocaleTimeString();
@@ -112,6 +149,101 @@
         const audio = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
         audio.play().catch(() => {});
       }
+
+      if (document.hidden && Notification.permission === "granted") {
+        new Notification("New message from Peer", { body: text });
+      }
+    }
+
+    // Update the call status
+    function updateCallStatus(status) {
+      alert(status);
+    }
+
+    // Setup video call connection
+    function setupVideoCall(stream) {
+      localVideo.srcObject = stream;
+      localStream = stream;
+    }
+
+    // Handle incoming connections (video call or chat)
+    peer.on("connection", incoming => {
+      const accept = confirm(`Incoming connection from ${incoming.peer}. Accept?`);
+      if (accept) {
+        conn = incoming;
+        setupConnection();
+      } else {
+        incoming.close();
+      }
+    });
+
+    // Handle incoming video calls
+    peer.on("call", incomingCall => {
+      const acceptCall = confirm(`Incoming video call from ${incomingCall.peer}. Accept?`);
+      if (acceptCall) {
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+          .then(stream => {
+            setupVideoCall(stream);
+            incomingCall.answer(stream);
+            incomingCall.on("stream", remoteStream => {
+              remoteVideo.srcObject = remoteStream;
+            });
+          })
+          .catch(err => {
+            console.error("Error getting media: ", err);
+          });
+      } else {
+        incomingCall.close();
+      }
+    });
+
+    // Connect to another peer
+    connectBtn.onclick = () => {
+      const targetId = connectToInput.value.trim();
+      if (targetId) connectToPeer(targetId);
+    };
+
+    function connectToPeer(id) {
+      conn = peer.connect(id);
+      conn.on("open", setupConnection);
+    }
+
+    // Setup chat connection
+    function setupConnection() {
+      sendBtn.disabled = false;
+      conn.on("data", data => addMessage("Peer", data));
+      conn.on("close", () => addMessage("System", "Connection closed."));
+      addMessage("System", "Connected!");
+    }
+
+    // Send a message
+    sendBtn.onclick = () => {
+      const msg = messageInput.value;
+      if (msg && conn?.open) {
+        conn.send(msg);
+        addMessage("You", msg);
+        messageInput.value = "";
+      }
+    };
+
+    // Handle the end of a video call
+    endCallBtn.onclick = () => {
+      if (call) call.close();
+      if (localStream) localStream.getTracks().forEach(track => track.stop());
+      videoCallContainer.style.display = "none";
+    };
+
+    // Request to make a video call
+    function requestVideoCall(id) {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then(stream => {
+          setupVideoCall(stream);
+          call = peer.call(id, stream);
+          call.on("stream", remoteStream => {
+            remoteVideo.srcObject = remoteStream;
+          });
+        })
+        .catch(err => console.log("Error getting video stream: ", err));
     }
 
     peer.on("open", id => {
@@ -125,70 +257,18 @@
         });
       };
 
-      if (targetIdFromUrl && /^\d{4}$/.test(targetIdFromUrl)) {
-        connectToInput.value = targetIdFromUrl;
+      if (targetIdFromUrl) {
         connectToPeer(targetIdFromUrl);
       }
     });
 
-    peer.on("connection", incoming => {
-      conn = incoming;
-      setupConnection();
-    });
-
-    connectBtn.onclick = () => {
-      const targetId = connectToInput.value.trim();
-      if (targetId) connectToPeer(targetId);
-    };
-
-    function connectToPeer(id) {
-      conn = peer.connect(id);
-      conn.on("open", setupConnection);
+    if (Notification.permission !== "granted") {
+      Notification.requestPermission();
     }
 
-    function setupConnection() {
-      sendBtn.disabled = false;
-      conn.on("data", data => addMessage("Peer", data));
-      conn.on("close", () => addMessage("System", "Connection closed."));
-      addMessage("System", "Connected!");
-    }
-
-    sendBtn.onclick = () => {
-      const msg = messageInput.value;
-      if (msg && conn?.open) {
-        conn.send(msg);
-        addMessage("You", msg);
-        messageInput.value = "";
-      }
-    };
-
-    peer.on("error", err => {
-      alert("PeerJS error: " + err.message);
-      console.error(err);
-    });
-
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(console.error);
-      });
-    }
-  </script>
-
-  <script type="application/json" id="pwa-manifest">
-    {
-      "name": "PeerChat",
-      "short_name": "PeerChat",
-      "start_url": ".",
-      "display": "standalone",
-      "background_color": "#ffffff",
-      "theme_color": "#4CAF50",
-      "icons": [
-        {
-          "src": "https://cdn-icons-png.flaticon.com/512/1384/1384031.png",
-          "sizes": "192x192",
-          "type": "image/png"
-        }
-      ]
+    // Ensure background notifications and connection handling
+    if (document.hidden && conn) {
+      conn.send("User is away");
     }
   </script>
 </body>
