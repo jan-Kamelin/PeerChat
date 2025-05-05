@@ -1,101 +1,83 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>PeerJS P2P Chat</title>
+  <meta charset="utf-8">
+  <title>P2P Chat</title>
   <style>
     body { font-family: sans-serif; padding: 1rem; }
-    #peer-id { font-weight: bold; color: darkblue; }
-    #messages { border: 1px solid #aaa; height: 200px; overflow-y: auto; padding: .5rem; }
-    #messages div { margin-bottom: .5rem; }
-    #controls { margin-top: 1rem; }
-    #controls input { width: 200px; }
+    #peer-id { font-weight: bold; color: green; }
+    #messages { border: 1px solid #ccc; height: 200px; overflow-y: auto; padding: 5px; margin: 10px 0; }
+    #messages div { margin-bottom: 4px; }
   </style>
 </head>
 <body>
-  <h1>P2P Chat</h1>
-  <p>Your Peer ID: <span id="peer-id">Loading…</span></p>
-
+  <h2>Simple P2P Chat</h2>
+  <p>Your ID: <span id="peer-id">Loading…</span></p>
+  <input type="text" id="connect-to" placeholder="Connect to peer ID">
+  <button id="connect">Connect</button>
   <div id="messages"></div>
+  <input type="text" id="message" placeholder="Message">
+  <button id="send" disabled>Send</button>
 
-  <div id="controls">
-    <input type="text" id="peer-id-input" placeholder="Peer ID to connect" />
-    <button id="connect">Connect</button>
-    <br/><br/>
-    <input type="text" id="message" placeholder="Type your message…" />
-    <button id="send" disabled>Send</button>
-  </div>
-
-  <script src="https://cdn.peerjs.com/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script>
-    // 1) Create PeerJS peer on the public PeerJS server
-    const peer = new Peer(undefined, {
-      host: '0.peerjs.com',
+    const peer = new Peer({
+      host: "0.peerjs.com",
       port: 443,
+      path: "/",
       secure: true
     });
 
-    const peerIdDisplay = document.getElementById('peer-id');
-    const peerInput     = document.getElementById('peer-id-input');
-    const connectBtn    = document.getElementById('connect');
-    const messagesDiv   = document.getElementById('messages');
-    const messageInput  = document.getElementById('message');
-    const sendBtn       = document.getElementById('send');
+    const peerIdDisplay = document.getElementById("peer-id");
+    const connectToInput = document.getElementById("connect-to");
+    const connectBtn = document.getElementById("connect");
+    const messageInput = document.getElementById("message");
+    const sendBtn = document.getElementById("send");
+    const messages = document.getElementById("messages");
 
-    let conn;  // will hold the DataConnection
+    let conn = null;
 
-    // Utility to append a message
-    function appendMessage(sender, text) {
-      const d = document.createElement('div');
-      d.textContent = `${sender}: ${text}`;
-      messagesDiv.appendChild(d);
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    function addMessage(sender, text) {
+      const msg = document.createElement("div");
+      msg.textContent = `${sender}: ${text}`;
+      messages.appendChild(msg);
+      messages.scrollTop = messages.scrollHeight;
     }
 
-    // 2) Show our Peer ID when ready
-    peer.on('open', id => {
+    peer.on("open", id => {
       peerIdDisplay.textContent = id;
     });
 
-    // 3) Handle incoming connections
-    peer.on('connection', c => {
-      conn = c;
+    peer.on("connection", incoming => {
+      conn = incoming;
       setupConnection();
     });
 
-    // 4) When user clicks “Connect”
     connectBtn.onclick = () => {
-      const otherId = peerInput.value.trim();
-      if (!otherId) return alert('Enter a Peer ID to connect');
-      conn = peer.connect(otherId);
-      conn.on('open', setupConnection);
+      if (!connectToInput.value) return;
+      conn = peer.connect(connectToInput.value);
+      conn.on("open", setupConnection);
     };
 
-    // 5) Once DataConnection is open, enable sending
     function setupConnection() {
       sendBtn.disabled = false;
-      conn.on('data', data => appendMessage('Peer', data));
-      conn.on('close', () => {
-        appendMessage('System', 'Connection closed');
-        sendBtn.disabled = true;
-      });
-      appendMessage('System', 'Connected!');
+      conn.on("data", data => addMessage("Peer", data));
+      conn.on("close", () => addMessage("System", "Connection closed."));
+      addMessage("System", "Connected!");
     }
 
-    // 6) Send messages
     sendBtn.onclick = () => {
-      const msg = messageInput.value.trim();
-      if (!msg || !conn || conn.open === false) return;
-      conn.send(msg);
-      appendMessage('Me', msg);
-      messageInput.value = '';
+      const msg = messageInput.value;
+      if (msg && conn?.open) {
+        conn.send(msg);
+        addMessage("You", msg);
+        messageInput.value = "";
+      }
     };
 
-    // 7) Handle errors
-    peer.on('error', err => {
+    peer.on("error", err => {
+      alert("PeerJS error: " + err.message);
       console.error(err);
-      alert('PeerJS error: ' + err);
     });
   </script>
 </body>
