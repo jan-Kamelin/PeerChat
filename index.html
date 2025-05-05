@@ -28,7 +28,7 @@
     <h1>P2P Chat App</h1>
     
     <div>
-        <h2>Your Peer ID: <span id="peer-id"></span></h2>
+        <h2>Your Peer ID: <span id="peer-id">Loading...</span></h2>
         <button onclick="startConnection()">Start Connection</button>
         <input type="text" id="peer-id-input" placeholder="Enter peer ID to connect" />
     </div>
@@ -57,9 +57,9 @@
         const localVideo = document.getElementById('local-video');
         const remoteVideosContainer = document.getElementById('remote-videos');
         
-        // Display the peer ID on the page
+        // Display the peer ID on the page once it's ready
         peer.on('open', (id) => {
-            peerIdDisplay.textContent = id;
+            peerIdDisplay.textContent = id;  // Display peer ID after connection is established
         });
 
         // When a peer connects
