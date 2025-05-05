@@ -120,6 +120,7 @@
     let conn, call;
     const peer = new Peer();
 
+    // Handle the generated ID
     peer.on('open', id => {
       document.getElementById('peer-id').textContent = id;
       document.getElementById('copy-link').disabled = false;
@@ -129,10 +130,10 @@
       };
     });
 
-    // Presence indicator
-    document.addEventListener('visibilitychange', () => {
-      document.getElementById('presence-status').textContent = document.hidden ? 'Away' : 'Active';
-    });
+    // Validate 4-digit ID input
+    function isValidID(id) {
+      return id.length === 4 && /^[0-9]+$/.test(id);
+    }
 
     const connectBtn = document.getElementById('connect');
     const callBtn = document.getElementById('call');
@@ -144,7 +145,10 @@
 
     connectBtn.onclick = () => {
       const id = document.getElementById('connect-to').value;
-      if (!id) return;
+      if (!id || !isValidID(id)) {
+        alert("Please enter a valid 4-digit ID!");
+        return;
+      }
       const outgoing = peer.connect(id);
       setupConnection(outgoing);
     };
@@ -160,7 +164,6 @@
         const div = document.createElement('div');
         div.textContent = "Peer: " + data;
         messages.appendChild(div);
-        messages.scrollTop = messages.scrollHeight; // Auto-scroll to latest message
       });
     }
 
@@ -170,7 +173,6 @@
       const div = document.createElement('div');
       div.textContent = "You: " + text;
       messages.appendChild(div);
-      messages.scrollTop = messages.scrollHeight; // Auto-scroll to latest message
       messageInput.value = '';
     };
 
@@ -178,7 +180,7 @@
       showRequest("chat-request", "Chat request received.", () => {
         setupConnection(incoming);
       }, () => {
-        incoming.close(); // Reject and close connection
+        incoming.close();
       });
     });
 
@@ -198,7 +200,7 @@
         call = incomingCall;
         handleCallStream(call);
       }, () => {
-        incomingCall.close(); // Reject and close call
+        incomingCall.close();
       });
     });
 
@@ -227,39 +229,29 @@
     function showNotification(msg) {
       notifications.textContent = msg;
       notifications.style.display = 'block';
-      setTimeout(() => notifications.style.display = 'none', 5000);
+      setTimeout(() => {
+        notifications.style.display = 'none';
+      }, 3000);
     }
 
-    function showRequest(containerId, text, onAccept, onReject) {
-      const container = document.getElementById(containerId);
-      container.innerHTML = `${text} <button>Accept</button> <button>Reject</button>`;
-      container.style.display = 'block';
-      const [acceptBtn, rejectBtn] = container.querySelectorAll('button');
-      acceptBtn.onclick = () => { container.style.display = 'none'; onAccept(); };
-      rejectBtn.onclick = () => { container.style.display = 'none'; onReject(); };
-    }
-
-    // Error handling for invalid connections
-    peer.on('error', err => {
-      showNotification("Error: " + err.message);
-    });
-  </script>
-
-  <script type="application/json" id="pwa-manifest">
-    {
-      "name": "PeerChat",
-      "short_name": "PeerChat",
-      "start_url": ".",
-      "display": "standalone",
-      "background_color": "#ffffff",
-      "theme_color": "#4CAF50",
-      "icons": [
-        {
-          "src": "icon.png",
-          "sizes": "192x192",
-          "type": "image/png"
-        }
-      ]
+    const chatRequest = document.getElementById('chat-request');
+    function showRequest(id, message, acceptCallback, rejectCallback) {
+      chatRequest.textContent = message;
+      chatRequest.style.display = 'block';
+      const acceptBtn = document.createElement('button');
+      acceptBtn.textContent = "Accept";
+      acceptBtn.onclick = () => {
+        acceptCallback();
+        chatRequest.style.display = 'none';
+      };
+      const rejectBtn = document.createElement('button');
+      rejectBtn.textContent = "Reject";
+      rejectBtn.onclick = () => {
+        rejectCallback();
+        chatRequest.style.display = 'none';
+      };
+      chatRequest.appendChild(acceptBtn);
+      chatRequest.appendChild(rejectBtn);
     }
   </script>
 </body>
