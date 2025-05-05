@@ -1,3 +1,4 @@
+<!-- Place this version as your full HTML file -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -53,6 +54,7 @@
       color: white;
       border: none;
       font-weight: bold;
+      cursor: pointer;
     }
     button:disabled {
       background-color: #a5d6a7;
@@ -66,6 +68,13 @@
       height: auto;
       border: 1px solid #ccc;
       margin-bottom: 10px;
+    }
+    .button-row {
+      display: flex;
+      gap: 10px;
+    }
+    .button-row button {
+      flex: 1;
     }
   </style>
 </head>
@@ -81,7 +90,10 @@
   <div id="messages"></div>
 
   <input type="text" id="message" placeholder="Message" />
-  <button id="send" disabled>Send</button>
+  <div class="button-row">
+    <button id="send" disabled>Send</button>
+    <button id="start-call" disabled>📹 Start Video Call</button>
+  </div>
 
   <div id="video-call">
     <h3>Video Call</h3>
@@ -113,6 +125,7 @@
     const connectBtn = document.getElementById("connect");
     const messageInput = document.getElementById("message");
     const sendBtn = document.getElementById("send");
+    const startCallBtn = document.getElementById("start-call");
     const messages = document.getElementById("messages");
     const copyLinkBtn = document.getElementById("copy-link");
     const videoCallContainer = document.getElementById("video-call");
@@ -153,6 +166,18 @@
       localVideo.srcObject = stream;
       localStream = stream;
       videoCallContainer.style.display = "block";
+    }
+
+    function requestVideoCall(id) {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then(stream => {
+          setupVideoCall(stream);
+          call = peer.call(id, stream);
+          call.on("stream", remoteStream => {
+            remoteVideo.srcObject = remoteStream;
+          });
+        })
+        .catch(err => console.log("Error getting video stream: ", err));
     }
 
     peer.on("connection", incoming => {
@@ -197,6 +222,7 @@
 
     function setupConnection() {
       sendBtn.disabled = false;
+      startCallBtn.disabled = false;
       conn.on("data", data => addMessage("Peer", data));
       conn.on("close", () => addMessage("System", "Connection closed."));
       addMessage("System", "Connected!");
@@ -211,23 +237,17 @@
       }
     };
 
+    startCallBtn.onclick = () => {
+      if (conn?.peer) {
+        requestVideoCall(conn.peer);
+      }
+    };
+
     endCallBtn.onclick = () => {
       if (call) call.close();
       if (localStream) localStream.getTracks().forEach(track => track.stop());
       videoCallContainer.style.display = "none";
     };
-
-    function requestVideoCall(id) {
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        .then(stream => {
-          setupVideoCall(stream);
-          call = peer.call(id, stream);
-          call.on("stream", remoteStream => {
-            remoteVideo.srcObject = remoteStream;
-          });
-        })
-        .catch(err => console.log("Error getting video stream: ", err));
-    }
 
     peer.on("open", id => {
       peerIdDisplay.textContent = id;
@@ -247,10 +267,6 @@
 
     if (Notification.permission !== "granted") {
       Notification.requestPermission();
-    }
-
-    if (document.hidden && conn) {
-      conn.send("User is away");
     }
   </script>
 </body>
