@@ -1,260 +1,104 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#4CAF50" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
+  <meta charset="utf-8">
   <title>PeerChat</title>
   <style>
-    body {
-      font-family: 'Inter', sans-serif;
-      margin: 0;
-      padding: 1rem;
-      background-color: #f5f5f5;
-    }
-    header {
-      background-color: #4CAF50;
-      color: white;
-      padding: 1rem;
-      text-align: center;
-      font-size: 1.8rem;
-      font-weight: 600;
-      border-radius: 8px;
-      margin-bottom: 1rem;
-    }
-    #peer-id {
-      font-weight: bold;
-      color: #2e7d32;
-    }
-    #messages {
-      background: white;
-      border: 1px solid #ccc;
-      height: 200px;
-      overflow-y: auto;
-      padding: 10px;
-      margin: 10px 0;
-      border-radius: 6px;
-      box-shadow: 0 0 5px rgba(0,0,0,0.1);
-    }
-    #messages div {
-      margin-bottom: 6px;
-    }
-    input, button {
-      width: 100%;
-      padding: 10px;
-      margin: 6px 0;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-      font-size: 1rem;
-    }
-    button {
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      font-weight: bold;
-    }
-    button:disabled {
-      background-color: #a5d6a7;
-    }
-    #video-container {
-      display: none;
-      margin-top: 1rem;
-    }
-    video {
-      width: 100%;
-      max-height: 200px;
-      border-radius: 6px;
-    }
-    #call-controls {
-      display: flex;
-      gap: 0.5rem;
-      margin-bottom: 1rem;
-    }
-    #notifications, #chat-request, #call-request {
-      margin: 1rem 0;
-      padding: 0.5rem;
-      background: #fff3cd;
-      border: 1px solid #ffeeba;
-      border-radius: 6px;
-      display: none;
-    }
-    #status {
-      margin-top: 0.5rem;
-      font-style: italic;
-      color: gray;
-    }
+    body { font-family: sans-serif; padding: 1rem; }
+    #peer-id { font-weight: bold; color: green; }
+    #messages { border: 1px solid #ccc; height: 200px; overflow-y: auto; padding: 5px; margin: 10px 0; }
+    #messages div { margin-bottom: 4px; }
   </style>
 </head>
 <body>
-  <header>🔗 PeerChat</header>
-
+  <h2>PeerChat</h2>
   <p>Your ID: <span id="peer-id">Loading…</span></p>
-  <p id="status">Status: <span id="presence-status">Active</span></p>
-  <button id="copy-link" disabled>Copy My Chat Link</button>
-
-  <input type="text" id="connect-to" placeholder="Connect to ID (4 digits)" />
-  <div id="call-controls">
-    <button id="connect">Connect</button>
-    <button id="call" disabled>📞 Call</button>
-    <button id="end-call" style="display:none">❌ End Call</button>
-    <button id="fullscreen" style="display:none">⛶ Fullscreen</button>
-  </div>
-
+  <input type="text" id="connect-to" placeholder="Connect to ID (4 digits)">
+  <button id="connect">Connect</button>
   <div id="messages"></div>
-
-  <input type="text" id="message" placeholder="Message" />
+  <input type="text" id="message" placeholder="Message">
   <button id="send" disabled>Send</button>
-
-  <div id="notifications"></div>
-  <div id="chat-request"></div>
-  <div id="call-request"></div>
-
-  <div id="video-container">
-    <video id="localVideo" autoplay muted></video>
-    <video id="remoteVideo" autoplay></video>
-  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script>
-    let conn, call;
-    const peer = new Peer();
+    // Get ?connect=xxxx from URL if it exists
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetIdFromUrl = urlParams.get("connect");
 
-    peer.on('open', id => {
-      document.getElementById('peer-id').textContent = id;
-      document.getElementById('copy-link').disabled = false;
-      document.getElementById('copy-link').onclick = () => {
-        navigator.clipboard.writeText(location.href + '#' + id);
-        showNotification("Link copied!");
-      };
+    const userId = prompt("Enter a 4-digit ID to use (e.g. 1234):");
+    if (!userId || !/^\d{4}$/.test(userId)) {
+      alert("Invalid ID. Please reload and enter a 4-digit number.");
+      throw new Error("Invalid ID");
+    }
+
+    const peer = new Peer(userId, {
+      host: "0.peerjs.com",
+      port: 443,
+      path: "/",
+      secure: true
     });
 
-    // Presence indicator
-    document.addEventListener('visibilitychange', () => {
-      document.getElementById('presence-status').textContent = document.hidden ? 'Away' : 'Active';
+    const peerIdDisplay = document.getElementById("peer-id");
+    const connectToInput = document.getElementById("connect-to");
+    const connectBtn = document.getElementById("connect");
+    const messageInput = document.getElementById("message");
+    const sendBtn = document.getElementById("send");
+    const messages = document.getElementById("messages");
+
+    let conn = null;
+
+    function addMessage(sender, text) {
+      const msg = document.createElement("div");
+      msg.textContent = ${sender}: ${text};
+      messages.appendChild(msg);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    peer.on("open", id => {
+      peerIdDisplay.textContent = id;
+
+      // If a connect target is in URL, try to connect
+      if (targetIdFromUrl && /^\d{4}$/.test(targetIdFromUrl)) {
+        connectToInput.value = targetIdFromUrl;
+        connectToPeer(targetIdFromUrl);
+      }
     });
 
-    const connectBtn = document.getElementById('connect');
-    const callBtn = document.getElementById('call');
-    const endCallBtn = document.getElementById('end-call');
-    const fullscreenBtn = document.getElementById('fullscreen');
-    const messageInput = document.getElementById('message');
-    const sendBtn = document.getElementById('send');
-    const messages = document.getElementById('messages');
+    peer.on("connection", incoming => {
+      conn = incoming;
+      setupConnection();
+    });
 
     connectBtn.onclick = () => {
-      const id = document.getElementById('connect-to').value;
-      if (!id) return;
-      const outgoing = peer.connect(id);
-      setupConnection(outgoing);
+      const targetId = connectToInput.value.trim();
+      if (targetId) connectToPeer(targetId);
     };
 
-    function setupConnection(c) {
-      conn = c;
-      conn.on('open', () => {
-        showNotification("Connected!");
-        sendBtn.disabled = false;
-        callBtn.disabled = false;
-      });
-      conn.on('data', data => {
-        const div = document.createElement('div');
-        div.textContent = "Peer: " + data;
-        messages.appendChild(div);
-      });
+    function connectToPeer(id) {
+      conn = peer.connect(id);
+      conn.on("open", setupConnection);
+    }
+
+    function setupConnection() {
+      sendBtn.disabled = false;
+      conn.on("data", data => addMessage("Peer", data));
+      conn.on("close", () => addMessage("System", "Connection closed."));
+      addMessage("System", "Connected!");
     }
 
     sendBtn.onclick = () => {
-      const text = messageInput.value;
-      conn.send(text);
-      const div = document.createElement('div');
-      div.textContent = "You: " + text;
-      messages.appendChild(div);
-      messageInput.value = '';
+      const msg = messageInput.value;
+      if (msg && conn?.open) {
+        conn.send(msg);
+        addMessage("You", msg);
+        messageInput.value = "";
+      }
     };
 
-    peer.on('connection', incoming => {
-      showRequest("chat-request", "Chat request received.", () => {
-        setupConnection(incoming);
-      }, () => {
-        incoming.close();
-      });
+    peer.on("error", err => {
+      alert("PeerJS error: " + err.message);
+      console.error(err);
     });
-
-    // Call handling
-    callBtn.onclick = async () => {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      document.getElementById('localVideo').srcObject = stream;
-      call = peer.call(document.getElementById('connect-to').value, stream);
-      handleCallStream(call);
-    };
-
-    peer.on('call', incomingCall => {
-      showRequest("call-request", "Incoming call. Accept video?", async () => {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        document.getElementById('localVideo').srcObject = stream;
-        incomingCall.answer(stream);
-        call = incomingCall;
-        handleCallStream(call);
-      }, () => {
-        incomingCall.close();
-      });
-    });
-
-    function handleCallStream(callInstance) {
-      document.getElementById('video-container').style.display = 'block';
-      endCallBtn.style.display = 'inline-block';
-      fullscreenBtn.style.display = 'inline-block';
-
-      callInstance.on('stream', remoteStream => {
-        document.getElementById('remoteVideo').srcObject = remoteStream;
-      });
-
-      endCallBtn.onclick = () => {
-        callInstance.close();
-        document.getElementById('video-container').style.display = 'none';
-        endCallBtn.style.display = 'none';
-        fullscreenBtn.style.display = 'none';
-      };
-
-      fullscreenBtn.onclick = () => {
-        document.getElementById('video-container').requestFullscreen();
-      };
-    }
-
-    const notifications = document.getElementById("notifications");
-    function showNotification(msg) {
-      notifications.textContent = msg;
-      notifications.style.display = 'block';
-      setTimeout(() => notifications.style.display = 'none', 5000);
-    }
-
-    function showRequest(containerId, text, onAccept, onReject) {
-      const container = document.getElementById(containerId);
-      container.innerHTML = `${text} <button>Accept</button> <button>Reject</button>`;
-      container.style.display = 'block';
-      const [acceptBtn, rejectBtn] = container.querySelectorAll('button');
-      acceptBtn.onclick = () => { container.style.display = 'none'; onAccept(); };
-      rejectBtn.onclick = () => { container.style.display = 'none'; onReject(); };
-    }
   </script>
-
-  <script type="application/json" id="pwa-manifest">
-    {
-      "name": "PeerChat",
-      "short_name": "PeerChat",
-      "start_url": ".",
-      "display": "standalone",
-      "background_color": "#ffffff",
-      "theme_color": "#4CAF50",
-      "icons": [
-        {
-          "src": "https://cdn-icons-png.flaticon.com/512/1384/1384031.png",
-          "sizes": "192x192",
-          "type": "image/png"
-        }
-      ]
-    }
-  </script>
-  <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlBlZXJDaGF0IiwKICAic2hvcnRfbmFtZSI6ICJQZWVyQ2hhdCIsCiAgInN0YXJ0X3VybCI6ICIuIiwKICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwKICAiYmFja2dyb3VuZF9jb2xvciI6ICIjZmZmZmZmIiwKICAidGhlbWVfY29sb3IiOiAiIzRDQUY1MCIsCiAgImljb25zIjogWwogICAgewogICAgICAic3JjIjogImh0dHBzOi8vY2RuLWljb25zLXBuZy5mbGF0aWNvbi5jb20vNTEyLzEzODQvMTM4NDAzMS5wbmciLAogICAgICAic2l6ZXMiOiAiMTkyeDE5MiIsCiAgICAgICJ0eXBlIjogImltYWdlL3BuZyIKICAgIH0KICBdCn0=" />
 </body>
 </html>
