@@ -1,13 +1,12 @@
-<!-- Place this version as your full HTML file -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#4CAF50" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
   <title>PeerChat</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
     body {
       font-family: 'Inter', sans-serif;
       margin: 0;
@@ -54,7 +53,6 @@
       color: white;
       border: none;
       font-weight: bold;
-      cursor: pointer;
     }
     button:disabled {
       background-color: #a5d6a7;
@@ -63,18 +61,15 @@
       display: none;
       margin-top: 20px;
     }
-    #remote-video, #local-video {
+    #remote-video {
       width: 100%;
       height: auto;
       border: 1px solid #ccc;
-      margin-bottom: 10px;
     }
-    .button-row {
-      display: flex;
-      gap: 10px;
-    }
-    .button-row button {
-      flex: 1;
+    #local-video {
+      width: 100%;
+      height: auto;
+      border: 1px solid #ccc;
     }
   </style>
 </head>
@@ -90,10 +85,7 @@
   <div id="messages"></div>
 
   <input type="text" id="message" placeholder="Message" />
-  <div class="button-row">
-    <button id="send" disabled>Send</button>
-    <button id="start-call" disabled>📹 Start Video Call</button>
-  </div>
+  <button id="send" disabled>Send</button>
 
   <div id="video-call">
     <h3>Video Call</h3>
@@ -107,10 +99,19 @@
     const urlParams = new URLSearchParams(window.location.search);
     const targetIdFromUrl = urlParams.get("connect");
 
-    const userId = prompt("Enter a 4-digit ID to use:");
-    if (!/^[0-9]{4}$/.test(userId)) {
-      alert("ID must be a 4-digit number.");
-      throw new Error("Invalid ID");
+    let userId = localStorage.getItem("peer-id"); // Retrieve stored ID from localStorage
+    if (!userId) {
+      // Prompt for a new ID if not saved
+      userId = prompt("Enter a 4-digit ID to use:");
+      if (!/^[0-9]{4}$/.test(userId)) {
+        alert("ID must be a 4-digit number.");
+        throw new Error("Invalid ID");
+      }
+      // Ask the user if they want to store their ID for next time
+      const storeId = confirm("Would you like to save your ID for next time?");
+      if (storeId) {
+        localStorage.setItem("peer-id", userId); // Save ID in localStorage
+      }
     }
 
     const peer = new Peer(userId, {
@@ -125,7 +126,6 @@
     const connectBtn = document.getElementById("connect");
     const messageInput = document.getElementById("message");
     const sendBtn = document.getElementById("send");
-    const startCallBtn = document.getElementById("start-call");
     const messages = document.getElementById("messages");
     const copyLinkBtn = document.getElementById("copy-link");
     const videoCallContainer = document.getElementById("video-call");
@@ -137,6 +137,7 @@
     let call = null;
     let localStream = null;
 
+    // Handle background focus and notifications
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && conn) {
         conn.send("User is away");
@@ -145,6 +146,7 @@
       }
     });
 
+    // Add messages to the chat
     function addMessage(sender, text) {
       const msg = document.createElement("div");
       const timestamp = new Date().toLocaleTimeString();
@@ -152,22 +154,97 @@
       messages.appendChild(msg);
       messages.scrollTop = messages.scrollHeight;
 
+      // Play sound on message received
       if (sender === "Peer") {
         const audio = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
         audio.play().catch(() => {});
       }
 
+      // Display notification if the page is not focused
       if (document.hidden && Notification.permission === "granted") {
         new Notification("New message from Peer", { body: text });
       }
     }
 
+    // Update the call status
+    function updateCallStatus(status) {
+      alert(status);
+    }
+
+    // Setup video call connection
     function setupVideoCall(stream) {
       localVideo.srcObject = stream;
       localStream = stream;
-      videoCallContainer.style.display = "block";
     }
 
+    // Handle incoming connections (video call or chat)
+    peer.on("connection", incoming => {
+      const accept = confirm(`Incoming connection from ${incoming.peer}. Accept?`);
+      if (accept) {
+        conn = incoming;
+        setupConnection();
+      } else {
+        incoming.close();
+      }
+    });
+
+    // Handle incoming video calls
+    peer.on("call", incomingCall => {
+      const acceptCall = confirm(`Incoming video call from ${incomingCall.peer}. Accept?`);
+      if (acceptCall) {
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+          .then(stream => {
+            setupVideoCall(stream);
+            incomingCall.answer(stream);
+            incomingCall.on("stream", remoteStream => {
+              remoteVideo.srcObject = remoteStream;
+            });
+          })
+          .catch(err => {
+            console.error("Error getting media: ", err);
+          });
+      } else {
+        incomingCall.close();
+      }
+    });
+
+    // Connect to another peer
+    connectBtn.onclick = () => {
+      const targetId = connectToInput.value.trim();
+      if (targetId) connectToPeer(targetId);
+    };
+
+    function connectToPeer(id) {
+      conn = peer.connect(id);
+      conn.on("open", setupConnection);
+    }
+
+    // Setup chat connection
+    function setupConnection() {
+      sendBtn.disabled = false;
+      conn.on("data", data => addMessage("Peer", data));
+      conn.on("close", () => addMessage("System", "Connection closed."));
+      addMessage("System", "Connected!");
+    }
+
+    // Send a message
+    sendBtn.onclick = () => {
+      const msg = messageInput.value;
+      if (msg && conn?.open) {
+        conn.send(msg);
+        addMessage("You", msg);
+        messageInput.value = "";
+      }
+    };
+
+    // Handle the end of a video call
+    endCallBtn.onclick = () => {
+      if (call) call.close();
+      if (localStream) localStream.getTracks().forEach(track => track.stop());
+      videoCallContainer.style.display = "none";
+    };
+
+    // Request to make a video call
     function requestVideoCall(id) {
       navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         .then(stream => {
@@ -180,83 +257,14 @@
         .catch(err => console.log("Error getting video stream: ", err));
     }
 
-    peer.on("connection", incoming => {
-      const accept = confirm(`Incoming connection from ${incoming.peer}. Accept?`);
-      if (accept) {
-        conn = incoming;
-        setupConnection();
-      } else {
-        incoming.close();
-      }
-    });
-
-    peer.on("call", incomingCall => {
-      const acceptCall = confirm(`Incoming video call from ${incomingCall.peer}. Accept?`);
-      if (acceptCall) {
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-          .then(stream => {
-            setupVideoCall(stream);
-            incomingCall.answer(stream);
-            incomingCall.on("stream", remoteStream => {
-              remoteVideo.srcObject = remoteStream;
-            });
-            call = incomingCall;
-          })
-          .catch(err => {
-            console.error("Error getting media: ", err);
-          });
-      } else {
-        incomingCall.close();
-      }
-    });
-
-    connectBtn.onclick = () => {
-      const targetId = connectToInput.value.trim();
-      if (targetId) connectToPeer(targetId);
-    };
-
-    function connectToPeer(id) {
-      conn = peer.connect(id);
-      conn.on("open", setupConnection);
-    }
-
-    function setupConnection() {
-      sendBtn.disabled = false;
-      startCallBtn.disabled = false;
-      conn.on("data", data => addMessage("Peer", data));
-      conn.on("close", () => addMessage("System", "Connection closed."));
-      addMessage("System", "Connected!");
-    }
-
-    sendBtn.onclick = () => {
-      const msg = messageInput.value;
-      if (msg && conn?.open) {
-        conn.send(msg);
-        addMessage("You", msg);
-        messageInput.value = "";
-      }
-    };
-
-    startCallBtn.onclick = () => {
-      if (conn?.peer) {
-        requestVideoCall(conn.peer);
-      }
-    };
-
-    endCallBtn.onclick = () => {
-      if (call) call.close();
-      if (localStream) localStream.getTracks().forEach(track => track.stop());
-      videoCallContainer.style.display = "none";
-    };
-
     peer.on("open", id => {
       peerIdDisplay.textContent = id;
       copyLinkBtn.disabled = false;
 
       copyLinkBtn.onclick = () => {
-        const link = `${window.location.origin}${window.location.pathname}?connect=${id}`;
+        const link = `${window.location.href}?connect=${id}`;
         navigator.clipboard.writeText(link).then(() => {
-          alert("Link copied to clipboard:\n" + link);
+          alert("Chat link copied to clipboard.");
         });
       };
 
@@ -265,6 +273,7 @@
       }
     });
 
+    // Ask for notification permission
     if (Notification.permission !== "granted") {
       Notification.requestPermission();
     }
