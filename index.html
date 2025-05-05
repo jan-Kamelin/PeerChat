@@ -93,12 +93,9 @@
   <p id="status">Status: <span id="presence-status">Active</span></p>
   <button id="copy-link" disabled>Copy My Chat Link</button>
 
-  <input type="text" id="peer-id-input" placeholder="Enter your 4-digit ID" maxlength="4" />
-  <button id="set-peer-id">Set ID</button>
-  
   <input type="text" id="connect-to" placeholder="Connect to ID (4 digits)" />
   <div id="call-controls">
-    <button id="connect" disabled>Connect</button>
+    <button id="connect">Connect</button>
     <button id="call" disabled>📞 Call</button>
     <button id="end-call" style="display:none">❌ End Call</button>
     <button id="fullscreen" style="display:none">⛶ Fullscreen</button>
@@ -122,23 +119,16 @@
   <script>
     let conn, call;
     const peer = new Peer();
-    
-    // Set the peer ID after input
-    document.getElementById('set-peer-id').onclick = function() {
-      const peerId = document.getElementById('peer-id-input').value;
-      if (peerId.length === 4) {
-        document.getElementById('peer-id').textContent = peerId;
-        document.getElementById('copy-link').disabled = false;
-        document.getElementById('copy-link').onclick = () => {
-          navigator.clipboard.writeText(location.href + '#' + peerId);
-          showNotification("Link copied!");
-        };
-      } else {
-        showNotification("Please enter a valid 4-digit ID.");
-      }
-    };
-    
-    // Presence indicator
+
+    peer.on('open', id => {
+      document.getElementById('peer-id').textContent = id;
+      document.getElementById('copy-link').disabled = false;
+      document.getElementById('copy-link').onclick = () => {
+        navigator.clipboard.writeText(location.href + '#' + id);
+        showNotification("Link copied!");
+      };
+    });
+
     document.addEventListener('visibilitychange', () => {
       document.getElementById('presence-status').textContent = document.hidden ? 'Away' : 'Active';
     });
@@ -189,7 +179,6 @@
       });
     });
 
-    // Call handling
     callBtn.onclick = async () => {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       document.getElementById('localVideo').srcObject = stream;
