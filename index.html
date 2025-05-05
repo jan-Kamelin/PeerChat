@@ -21,6 +21,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script>
+    // Get ?connect=xxxx from URL if it exists
     const urlParams = new URLSearchParams(window.location.search);
     const targetIdFromUrl = urlParams.get("connect");
 
@@ -56,6 +57,7 @@
     peer.on("open", id => {
       peerIdDisplay.textContent = id;
 
+      // If a connect target is in URL, try to connect
       if (targetIdFromUrl && /^\d{4}$/.test(targetIdFromUrl)) {
         connectToInput.value = targetIdFromUrl;
         connectToPeer(targetIdFromUrl);
@@ -69,38 +71,24 @@
 
     connectBtn.onclick = () => {
       const targetId = connectToInput.value.trim();
-      if (targetId && /^\d{4}$/.test(targetId)) {
-        connectToPeer(targetId);
-      } else {
-        alert("Please enter a valid 4-digit ID.");
-      }
+      if (targetId) connectToPeer(targetId);
     };
 
     function connectToPeer(id) {
-      const newConn = peer.connect(id);
-
-      newConn.on("open", () => {
-        conn = newConn;
-        setupConnection();
-      });
-
-      newConn.on("error", err => {
-        alert("Connection error: " + err.message);
-        console.error(err);
-      });
+      conn = peer.connect(id);
+      conn.on("open", setupConnection);
     }
 
     function setupConnection() {
       sendBtn.disabled = false;
-
       conn.on("data", data => addMessage("Peer", data));
       conn.on("close", () => addMessage("System", "Connection closed."));
       addMessage("System", "Connected!");
     }
 
     sendBtn.onclick = () => {
-      const msg = messageInput.value.trim();
-      if (msg && conn && conn.open) {
+      const msg = messageInput.value;
+      if (msg && conn?.open) {
         conn.send(msg);
         addMessage("You", msg);
         messageInput.value = "";
