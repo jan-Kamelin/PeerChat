@@ -160,6 +160,7 @@
         const div = document.createElement('div');
         div.textContent = "Peer: " + data;
         messages.appendChild(div);
+        messages.scrollTop = messages.scrollHeight; // Auto-scroll to latest message
       });
     }
 
@@ -169,6 +170,7 @@
       const div = document.createElement('div');
       div.textContent = "You: " + text;
       messages.appendChild(div);
+      messages.scrollTop = messages.scrollHeight; // Auto-scroll to latest message
       messageInput.value = '';
     };
 
@@ -176,7 +178,7 @@
       showRequest("chat-request", "Chat request received.", () => {
         setupConnection(incoming);
       }, () => {
-        incoming.close();
+        incoming.close(); // Reject and close connection
       });
     });
 
@@ -196,7 +198,7 @@
         call = incomingCall;
         handleCallStream(call);
       }, () => {
-        incomingCall.close();
+        incomingCall.close(); // Reject and close call
       });
     });
 
@@ -236,6 +238,11 @@
       acceptBtn.onclick = () => { container.style.display = 'none'; onAccept(); };
       rejectBtn.onclick = () => { container.style.display = 'none'; onReject(); };
     }
+
+    // Error handling for invalid connections
+    peer.on('error', err => {
+      showNotification("Error: " + err.message);
+    });
   </script>
 
   <script type="application/json" id="pwa-manifest">
@@ -248,13 +255,12 @@
       "theme_color": "#4CAF50",
       "icons": [
         {
-          "src": "https://cdn-icons-png.flaticon.com/512/1384/1384031.png",
+          "src": "icon.png",
           "sizes": "192x192",
           "type": "image/png"
         }
       ]
     }
   </script>
-  <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlBlZXJDaGF0IiwKICAic2hvcnRfbmFtZSI6ICJQZWVyQ2hhdCIsCiAgInN0YXJ0X3VybCI6ICIuIiwKICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwKICAiYmFja2dyb3VuZF9jb2xvciI6ICIjZmZmZmZmIiwKICAidGhlbWVfY29sb3IiOiAiIzRDQUY1MCIsCiAgImljb25zIjogWwogICAgewogICAgICAic3JjIjogImh0dHBzOi8vY2RuLWljb25zLXBuZy5mbGF0aWNvbi5jb20vNTEyLzEzODQvMTM4NDAzMS5wbmciLAogICAgICAic2l6ZXMiOiAiMTkyeDE5MiIsCiAgICAgICJ0eXBlIjogImltYWdlL3BuZyIKICAgIH0KICBdCn0=" />
 </body>
 </html>
