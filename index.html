@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>P2P Chat</title>
+  <title>P2P Chat (4-digit ID + URL Share)</title>
   <style>
     body { font-family: sans-serif; padding: 1rem; }
     #peer-id { font-weight: bold; color: green; }
@@ -13,7 +13,7 @@
 <body>
   <h2>Simple P2P Chat</h2>
   <p>Your ID: <span id="peer-id">Loading…</span></p>
-  <input type="text" id="connect-to" placeholder="Connect to peer ID">
+  <input type="text" id="connect-to" placeholder="Connect to ID (4 digits)">
   <button id="connect">Connect</button>
   <div id="messages"></div>
   <input type="text" id="message" placeholder="Message">
@@ -21,7 +21,17 @@
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script>
-    const peer = new Peer({
+    // Get ?connect=xxxx from URL if it exists
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetIdFromUrl = urlParams.get("connect");
+
+    const userId = prompt("Enter a 4-digit ID to use (e.g. 1234):");
+    if (!userId || !/^\d{4}$/.test(userId)) {
+      alert("Invalid ID. Please reload and enter a 4-digit number.");
+      throw new Error("Invalid ID");
+    }
+
+    const peer = new Peer(userId, {
       host: "0.peerjs.com",
       port: 443,
       path: "/",
@@ -46,6 +56,12 @@
 
     peer.on("open", id => {
       peerIdDisplay.textContent = id;
+
+      // If a connect target is in URL, try to connect
+      if (targetIdFromUrl && /^\d{4}$/.test(targetIdFromUrl)) {
+        connectToInput.value = targetIdFromUrl;
+        connectToPeer(targetIdFromUrl);
+      }
     });
 
     peer.on("connection", incoming => {
@@ -54,10 +70,14 @@
     });
 
     connectBtn.onclick = () => {
-      if (!connectToInput.value) return;
-      conn = peer.connect(connectToInput.value);
-      conn.on("open", setupConnection);
+      const targetId = connectToInput.value.trim();
+      if (targetId) connectToPeer(targetId);
     };
+
+    function connectToPeer(id) {
+      conn = peer.connect(id);
+      conn.on("open", setupConnection);
+    }
 
     function setupConnection() {
       sendBtn.disabled = false;
