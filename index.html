@@ -89,30 +89,38 @@
 <body>
   <header>🔗 PeerChat</header>
 
-  <p>Your ID: <span id="peer-id">Loading…</span></p>
-  <p id="status">Status: <span id="presence-status">Active</span></p>
-  <button id="copy-link" disabled>Copy My Chat Link</button>
-
-  <input type="text" id="connect-to" placeholder="Connect to ID (4 digits)" />
-  <div id="call-controls">
-    <button id="connect">Connect</button>
-    <button id="call" disabled>📞 Call</button>
-    <button id="end-call" style="display:none">❌ End Call</button>
-    <button id="fullscreen" style="display:none">⛶ Fullscreen</button>
+  <div id="setup-container">
+    <p>Please enter your 4-digit ID:</p>
+    <input type="text" id="your-id" placeholder="Enter your 4-digit ID" maxlength="4" />
+    <button id="save-your-id">Save ID</button>
   </div>
 
-  <div id="messages"></div>
+  <div id="chat-container" style="display:none;">
+    <p>Your ID: <span id="peer-id">Loading…</span></p>
+    <p id="status">Status: <span id="presence-status">Active</span></p>
+    <button id="copy-link" disabled>Copy My Chat Link</button>
 
-  <input type="text" id="message" placeholder="Message" />
-  <button id="send" disabled>Send</button>
+    <input type="text" id="connect-to" placeholder="Connect to ID (4 digits)" />
+    <div id="call-controls">
+      <button id="connect">Connect</button>
+      <button id="call" disabled>📞 Call</button>
+      <button id="end-call" style="display:none">❌ End Call</button>
+      <button id="fullscreen" style="display:none">⛶ Fullscreen</button>
+    </div>
 
-  <div id="notifications"></div>
-  <div id="chat-request"></div>
-  <div id="call-request"></div>
+    <div id="messages"></div>
 
-  <div id="video-container">
-    <video id="localVideo" autoplay muted></video>
-    <video id="remoteVideo" autoplay></video>
+    <input type="text" id="message" placeholder="Message" />
+    <button id="send" disabled>Send</button>
+
+    <div id="notifications"></div>
+    <div id="chat-request"></div>
+    <div id="call-request"></div>
+
+    <div id="video-container">
+      <video id="localVideo" autoplay muted></video>
+      <video id="remoteVideo" autoplay></video>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -120,21 +128,40 @@
     let conn, call;
     const peer = new Peer();
 
-    // Handle the generated ID
-    peer.on('open', id => {
-      document.getElementById('peer-id').textContent = id;
-      document.getElementById('copy-link').disabled = false;
-      document.getElementById('copy-link').onclick = () => {
-        navigator.clipboard.writeText(location.href + '#' + id);
-        showNotification("Link copied!");
-      };
-    });
+    // Prompt for the user's 4-digit ID before allowing chat
+    const setupContainer = document.getElementById("setup-container");
+    const chatContainer = document.getElementById("chat-container");
+    const saveYourIdBtn = document.getElementById("save-your-id");
+    const yourIdInput = document.getElementById("your-id");
 
-    // Validate 4-digit ID input
+    // Check if the entered ID is valid
     function isValidID(id) {
       return id.length === 4 && /^[0-9]+$/.test(id);
     }
 
+    // Save the user's ID
+    saveYourIdBtn.onclick = () => {
+      const yourId = yourIdInput.value;
+      if (!isValidID(yourId)) {
+        alert("Please enter a valid 4-digit ID!");
+        return;
+      }
+
+      peer.on('open', id => {
+        document.getElementById('peer-id').textContent = id;
+        document.getElementById('copy-link').disabled = false;
+        document.getElementById('copy-link').onclick = () => {
+          navigator.clipboard.writeText(location.href + '#' + id);
+          showNotification("Link copied!");
+        };
+      });
+
+      // Show chat interface once the ID is set
+      setupContainer.style.display = 'none';
+      chatContainer.style.display = 'block';
+    };
+
+    // Connect to another peer
     const connectBtn = document.getElementById('connect');
     const callBtn = document.getElementById('call');
     const endCallBtn = document.getElementById('end-call');
