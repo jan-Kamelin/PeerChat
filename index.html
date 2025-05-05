@@ -89,17 +89,19 @@
 <body>
   <header>🔗 PeerChat</header>
 
-  <div id="setup-container">
-    <p>Please enter your 4-digit ID:</p>
-    <input type="text" id="your-id" placeholder="Enter your 4-digit ID" maxlength="4" />
-    <button id="save-your-id">Save ID</button>
+  <p>Your ID: <span id="peer-id">Loading…</span></p>
+  <p id="status">Status: <span id="presence-status">Active</span></p>
+  <button id="copy-link" disabled>Copy My Chat Link</button>
+
+  <!-- Prompt for ID input -->
+  <div id="id-input">
+    <label for="user-id">Enter your 4-digit ID:</label>
+    <input type="text" id="user-id" maxlength="4" placeholder="4-digit ID" />
+    <button id="set-id-btn">Set ID</button>
   </div>
 
-  <div id="chat-container" style="display:none;">
-    <p>Your ID: <span id="peer-id">Loading…</span></p>
-    <p id="status">Status: <span id="presence-status">Active</span></p>
-    <button id="copy-link" disabled>Copy My Chat Link</button>
-
+  <!-- Once the ID is set, the rest is accessible -->
+  <div id="connect-section" style="display: none;">
     <input type="text" id="connect-to" placeholder="Connect to ID (4 digits)" />
     <div id="call-controls">
       <button id="connect">Connect</button>
@@ -128,40 +130,31 @@
     let conn, call;
     const peer = new Peer();
 
-    // Prompt for the user's 4-digit ID before allowing chat
-    const setupContainer = document.getElementById("setup-container");
-    const chatContainer = document.getElementById("chat-container");
-    const saveYourIdBtn = document.getElementById("save-your-id");
-    const yourIdInput = document.getElementById("your-id");
-
-    // Check if the entered ID is valid
-    function isValidID(id) {
-      return id.length === 4 && /^[0-9]+$/.test(id);
-    }
-
-    // Save the user's ID
-    saveYourIdBtn.onclick = () => {
-      const yourId = yourIdInput.value;
-      if (!isValidID(yourId)) {
-        alert("Please enter a valid 4-digit ID!");
-        return;
+    // Prompt for user ID and setup connection only after ID is set
+    document.getElementById('set-id-btn').onclick = function() {
+      const userId = document.getElementById('user-id').value;
+      if (userId.length === 4 && !isNaN(userId)) {
+        document.getElementById('peer-id').textContent = userId;
+        document.getElementById('id-input').style.display = 'none';
+        document.getElementById('connect-section').style.display = 'block';
+        peer.on('open', id => {
+          document.getElementById('peer-id').textContent = id;
+          document.getElementById('copy-link').disabled = false;
+          document.getElementById('copy-link').onclick = () => {
+            navigator.clipboard.writeText(location.href + '#' + id);
+            showNotification("Link copied!");
+          };
+        });
+      } else {
+        alert("Please enter a valid 4-digit ID");
       }
-
-      peer.on('open', id => {
-        document.getElementById('peer-id').textContent = id;
-        document.getElementById('copy-link').disabled = false;
-        document.getElementById('copy-link').onclick = () => {
-          navigator.clipboard.writeText(location.href + '#' + id);
-          showNotification("Link copied!");
-        };
-      });
-
-      // Show chat interface once the ID is set
-      setupContainer.style.display = 'none';
-      chatContainer.style.display = 'block';
     };
 
-    // Connect to another peer
+    // Presence indicator
+    document.addEventListener('visibilitychange', () => {
+      document.getElementById('presence-status').textContent = document.hidden ? 'Away' : 'Active';
+    });
+
     const connectBtn = document.getElementById('connect');
     const callBtn = document.getElementById('call');
     const endCallBtn = document.getElementById('end-call');
@@ -172,10 +165,7 @@
 
     connectBtn.onclick = () => {
       const id = document.getElementById('connect-to').value;
-      if (!id || !isValidID(id)) {
-        alert("Please enter a valid 4-digit ID!");
-        return;
-      }
+      if (!id) return;
       const outgoing = peer.connect(id);
       setupConnection(outgoing);
     };
@@ -253,33 +243,26 @@
     }
 
     const notifications = document.getElementById("notifications");
-    function showNotification(msg) {
-      notifications.textContent = msg;
-      notifications.style.display = 'block';
+    const chatRequest = document.getElementById("chat-request");
+    const callRequest = document.getElementById("call-request");
+
+    function showRequest(id, text, acceptFunc, rejectFunc) {
+      const requestElement = document.getElementById(id);
+      requestElement.textContent = text;
+      requestElement.style.display = 'block';
+      requestElement.onclick = acceptFunc;
       setTimeout(() => {
-        notifications.style.display = 'none';
-      }, 3000);
+        rejectFunc();
+        requestElement.style.display = 'none';
+      }, 15000);
     }
 
-    const chatRequest = document.getElementById('chat-request');
-    function showRequest(id, message, acceptCallback, rejectCallback) {
-      chatRequest.textContent = message;
-      chatRequest.style.display = 'block';
-      const acceptBtn = document.createElement('button');
-      acceptBtn.textContent = "Accept";
-      acceptBtn.onclick = () => {
-        acceptCallback();
-        chatRequest.style.display = 'none';
-      };
-      const rejectBtn = document.createElement('button');
-      rejectBtn.textContent = "Reject";
-      rejectBtn.onclick = () => {
-        rejectCallback();
-        chatRequest.style.display = 'none';
-      };
-      chatRequest.appendChild(acceptBtn);
-      chatRequest.appendChild(rejectBtn);
+    function showNotification(text) {
+      notifications.textContent = text;
+      notifications.style.display = 'block';
+      setTimeout(() => notifications.style.display = 'none', 2000);
     }
+
   </script>
 </body>
 </html>
