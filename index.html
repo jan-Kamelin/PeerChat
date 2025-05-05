@@ -1,143 +1,102 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>P2P Chat App</title>
-    <style>
-        #local-video {
-            width: 45%;
-            border: 1px solid black;
-            margin: 10px;
-        }
-        #remote-videos {
-            display: flex;
-            flex-wrap: wrap;
-        }
-        video {
-            width: 45%;
-            margin: 10px;
-            border: 1px solid black;
-        }
-        #messages {
-            margin-top: 20px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>PeerJS P2P Chat</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    #peer-id { font-weight: bold; color: darkblue; }
+    #messages { border: 1px solid #aaa; height: 200px; overflow-y: auto; padding: .5rem; }
+    #messages div { margin-bottom: .5rem; }
+    #controls { margin-top: 1rem; }
+    #controls input { width: 200px; }
+  </style>
 </head>
 <body>
-    <h1>P2P Chat App</h1>
-    
-    <div>
-        <h2>Your Peer ID: <span id="peer-id">Loading...</span></h2>
-        <button onclick="startConnection()">Start Connection</button>
-        <input type="text" id="peer-id-input" placeholder="Enter peer ID to connect" />
-    </div>
-    
-    <div id="local-video-container">
-        <video id="local-video" autoplay muted></video>
-    </div>
+  <h1>P2P Chat</h1>
+  <p>Your Peer ID: <span id="peer-id">Loading…</span></p>
 
-    <div id="remote-videos"></div>
+  <div id="messages"></div>
 
-    <div id="messages">
-        <h3>Messages:</h3>
-        <div id="message-log"></div>
-        <input type="text" id="message" placeholder="Type a message..." />
-        <button id="send-message">Send Message</button>
-    </div>
+  <div id="controls">
+    <input type="text" id="peer-id-input" placeholder="Peer ID to connect" />
+    <button id="connect">Connect</button>
+    <br/><br/>
+    <input type="text" id="message" placeholder="Type your message…" />
+    <button id="send" disabled>Send</button>
+  </div>
 
-    <script src="https://cdn.peerjs.com/peerjs.min.js"></script>
-    <script>
-        // Initialize PeerJS peer object
-        const peer = new Peer();
-        const messagesDiv = document.getElementById('message-log');
-        const messageInput = document.getElementById('message');
-        const sendButton = document.getElementById('send-message');
-        const peerIdDisplay = document.getElementById('peer-id');
-        const localVideo = document.getElementById('local-video');
-        const remoteVideosContainer = document.getElementById('remote-videos');
-        
-        // Display the peer ID on the page once it's ready
-        peer.on('open', (id) => {
-            peerIdDisplay.textContent = id;  // Display peer ID after connection is established
-        });
+  <script src="https://cdn.peerjs.com/peerjs.min.js"></script>
+  <script>
+    // 1) Create PeerJS peer on the public PeerJS server
+    const peer = new Peer(undefined, {
+      host: '0.peerjs.com',
+      port: 443,
+      secure: true
+    });
 
-        // When a peer connects
-        peer.on('connection', (conn) => {
-            console.log('Connected to peer: ' + conn.peer);
+    const peerIdDisplay = document.getElementById('peer-id');
+    const peerInput     = document.getElementById('peer-id-input');
+    const connectBtn    = document.getElementById('connect');
+    const messagesDiv   = document.getElementById('messages');
+    const messageInput  = document.getElementById('message');
+    const sendBtn       = document.getElementById('send');
 
-            // Handle incoming messages
-            conn.on('data', (data) => {
-                const messageDiv = document.createElement('div');
-                messageDiv.textContent = `Peer: ${data}`;
-                messagesDiv.appendChild(messageDiv);
-                messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            });
+    let conn;  // will hold the DataConnection
 
-            // Send message to peer
-            sendButton.addEventListener('click', () => {
-                const message = messageInput.value;
-                if (message && conn.open) {
-                    conn.send(message);
-                    const messageDiv = document.createElement('div');
-                    messageDiv.textContent = `Me: ${message}`;
-                    messagesDiv.appendChild(messageDiv);
-                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-                    messageInput.value = '';  // Clear input
-                }
-            });
-        });
+    // Utility to append a message
+    function appendMessage(sender, text) {
+      const d = document.createElement('div');
+      d.textContent = `${sender}: ${text}`;
+      messagesDiv.appendChild(d);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
 
-        // Handle receiving the video stream
-        peer.on('call', (call) => {
-            call.answer(localStream); // Answer the call with the local stream
+    // 2) Show our Peer ID when ready
+    peer.on('open', id => {
+      peerIdDisplay.textContent = id;
+    });
 
-            call.on('stream', (remoteStream) => {
-                const remoteVideo = document.createElement('video');
-                remoteVideo.srcObject = remoteStream;
-                remoteVideo.autoplay = true;
-                remoteVideosContainer.appendChild(remoteVideo);
-            });
-        });
+    // 3) Handle incoming connections
+    peer.on('connection', c => {
+      conn = c;
+      setupConnection();
+    });
 
-        // Get local media (camera and microphone)
-        let localStream;
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-            .then((stream) => {
-                localStream = stream;
-                localVideo.srcObject = stream;
-            })
-            .catch((err) => {
-                console.error('Error accessing media devices.', err);
-            });
+    // 4) When user clicks “Connect”
+    connectBtn.onclick = () => {
+      const otherId = peerInput.value.trim();
+      if (!otherId) return alert('Enter a Peer ID to connect');
+      conn = peer.connect(otherId);
+      conn.on('open', setupConnection);
+    };
 
-        // Connect to another peer
-        function startConnection() {
-            const peerId = document.getElementById('peer-id-input').value;
-            if (peerId) {
-                const conn = peer.connect(peerId);  // Connect to peer
+    // 5) Once DataConnection is open, enable sending
+    function setupConnection() {
+      sendBtn.disabled = false;
+      conn.on('data', data => appendMessage('Peer', data));
+      conn.on('close', () => {
+        appendMessage('System', 'Connection closed');
+        sendBtn.disabled = true;
+      });
+      appendMessage('System', 'Connected!');
+    }
 
-                conn.on('open', () => {
-                    console.log('Connected to peer: ' + peerId);
-                });
+    // 6) Send messages
+    sendBtn.onclick = () => {
+      const msg = messageInput.value.trim();
+      if (!msg || !conn || conn.open === false) return;
+      conn.send(msg);
+      appendMessage('Me', msg);
+      messageInput.value = '';
+    };
 
-                conn.on('data', (data) => {
-                    const messageDiv = document.createElement('div');
-                    messageDiv.textContent = `Peer: ${data}`;
-                    messagesDiv.appendChild(messageDiv);
-                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-                });
-
-                // Initiate the video call
-                const call = peer.call(peerId, localStream);
-                call.on('stream', (remoteStream) => {
-                    const remoteVideo = document.createElement('video');
-                    remoteVideo.srcObject = remoteStream;
-                    remoteVideo.autoplay = true;
-                    remoteVideosContainer.appendChild(remoteVideo);
-                });
-            }
-        }
-    </script>
+    // 7) Handle errors
+    peer.on('error', err => {
+      console.error(err);
+      alert('PeerJS error: ' + err);
+    });
+  </script>
 </body>
 </html>
