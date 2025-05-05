@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#4CAF50" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
   <title>PeerChat</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
     body {
       font-family: 'Inter', sans-serif;
       margin: 0;
@@ -61,15 +61,11 @@
       display: none;
       margin-top: 20px;
     }
-    #remote-video {
+    #remote-video, #local-video {
       width: 100%;
       height: auto;
       border: 1px solid #ccc;
-    }
-    #local-video {
-      width: 100%;
-      height: auto;
-      border: 1px solid #ccc;
+      margin-bottom: 10px;
     }
   </style>
 </head>
@@ -128,7 +124,6 @@
     let call = null;
     let localStream = null;
 
-    // Handle background focus and notifications
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && conn) {
         conn.send("User is away");
@@ -137,7 +132,6 @@
       }
     });
 
-    // Add messages to the chat
     function addMessage(sender, text) {
       const msg = document.createElement("div");
       const timestamp = new Date().toLocaleTimeString();
@@ -155,18 +149,12 @@
       }
     }
 
-    // Update the call status
-    function updateCallStatus(status) {
-      alert(status);
-    }
-
-    // Setup video call connection
     function setupVideoCall(stream) {
       localVideo.srcObject = stream;
       localStream = stream;
+      videoCallContainer.style.display = "block";
     }
 
-    // Handle incoming connections (video call or chat)
     peer.on("connection", incoming => {
       const accept = confirm(`Incoming connection from ${incoming.peer}. Accept?`);
       if (accept) {
@@ -177,7 +165,6 @@
       }
     });
 
-    // Handle incoming video calls
     peer.on("call", incomingCall => {
       const acceptCall = confirm(`Incoming video call from ${incomingCall.peer}. Accept?`);
       if (acceptCall) {
@@ -188,6 +175,7 @@
             incomingCall.on("stream", remoteStream => {
               remoteVideo.srcObject = remoteStream;
             });
+            call = incomingCall;
           })
           .catch(err => {
             console.error("Error getting media: ", err);
@@ -197,7 +185,6 @@
       }
     });
 
-    // Connect to another peer
     connectBtn.onclick = () => {
       const targetId = connectToInput.value.trim();
       if (targetId) connectToPeer(targetId);
@@ -208,7 +195,6 @@
       conn.on("open", setupConnection);
     }
 
-    // Setup chat connection
     function setupConnection() {
       sendBtn.disabled = false;
       conn.on("data", data => addMessage("Peer", data));
@@ -216,7 +202,6 @@
       addMessage("System", "Connected!");
     }
 
-    // Send a message
     sendBtn.onclick = () => {
       const msg = messageInput.value;
       if (msg && conn?.open) {
@@ -226,14 +211,12 @@
       }
     };
 
-    // Handle the end of a video call
     endCallBtn.onclick = () => {
       if (call) call.close();
       if (localStream) localStream.getTracks().forEach(track => track.stop());
       videoCallContainer.style.display = "none";
     };
 
-    // Request to make a video call
     function requestVideoCall(id) {
       navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         .then(stream => {
@@ -266,7 +249,6 @@
       Notification.requestPermission();
     }
 
-    // Ensure background notifications and connection handling
     if (document.hidden && conn) {
       conn.send("User is away");
     }
